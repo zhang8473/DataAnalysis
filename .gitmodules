@@ -1,0 +1,3 @@
+[submodule "pylibshared"]
+	path = pylibshared
+	url = https://github.com/HiTalentAlgorithms/pylibshared.git

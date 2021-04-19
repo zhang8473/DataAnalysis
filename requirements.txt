@@ -1,0 +1,15 @@
+argparse~=1.4.0
+mariadb~=1.0.6
+geopy~=2.0.0
+pymongo~=3.11.0
+urllib3~=1.25.10
+elasticsearch~=7.8.1
+python-dateutil~=2.8.0
+requests~=2.24.0
+googletrans~=4.0.0rc1
+httpcore~=0.9.1
+httpx~=0.13.3
+pinyin~=0.4.0
+pkuseg~=0.0.25
+phonenumbers~=8.12.20
+tornado~=6.0.3

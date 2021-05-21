@@ -1,4 +1,4 @@
-JOB_USELESS_KEYS = ('createdBy', 'createdDate', 'lastModifiedDate',
+JOB_USELESS_KEYS = ('createdBy', 'createdDate', 'lastModifiedDate','hrEntity', 'hrId', 'publicDesc', 'primarySale',
                  'jobId', 'tenantId', 'createdUser', 'purchased', 'talentType',
                 'hiringManagerEntity', 'hiringManagerId', 'internal', 'divisionId', 'applicationStats',
                 'billRateUnitType')

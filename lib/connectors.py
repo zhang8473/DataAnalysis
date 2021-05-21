@@ -1,8 +1,7 @@
 import json
-import requests
 import mariadb
 from environments import JOB_USELESS_KEYS, TALENT_USELESS_KEYS
-from pylibshared.utils.logger import get_logger
+from libsearcher.pylibshared.utils.logger import get_logger
 logger = get_logger(__name__, debug_level='DEBUG', to_file=True, to_stdout=True)
 
 
@@ -93,3 +92,25 @@ class APN:
     def get_job(self, id_):
         response = requests.request("GET", self.__host + f'/api/v1/jobs/{id_}', headers=self.__header)
         return APN.__format_job_data(response.json())
+
+
+import requests
+
+
+class ESFiller:
+    def __init__(self, server='localhost:5050'):
+        self._address = 'http://' + server
+
+    def fill_job(self, doc, id_):
+        response = requests.request("POST",
+                                    url=self._address + f'/filler/v2/sync/tenant/10/job/{id_}/fill_es/',
+                                    headers={'Content-Type': 'application/json'},
+                                    data=json.dumps(doc, ensure_ascii=False).encode('utf-8'))
+        return response.json()
+
+    def fill_talent(self, doc, id_):
+        response = requests.request("POST",
+                                    url=self._address + f'/filler/v1/sync/tenant/10/talent/{id_}/fill_es/',
+                                    headers={'Content-Type': 'application/json'},
+                                    data=json.dumps(doc, ensure_ascii=False).encode('utf-8'))
+        return response.json()

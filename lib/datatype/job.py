@@ -1,8 +1,9 @@
 import numpy as np
 from datetime import datetime
-from libsearcher import TalentConditions, KeywordSearcher, Operator, ExperienceYearSearcher, LanguageSearcher, JobFunctionSearcher
-from libsearcher.location import LocationSearcher, SearchMode
-from libsearcher.pylibshared.enumerations import JobStatus, Degree
+from libsearcher import TalentConditions, KeywordSearcher, Operator, ExperienceYearSearcher, LanguageSearcher, JobFunctionSearcher, DegreeSearcher, LocationSearcher
+from libsearcher.location import SearchMode as LocationSearchMode
+from libsearcher.degree import SearchMode as DegreeSearchMode
+from libsearcher.pylibshared.enumerations import JobStatus
 from libsearcher.pylibshared.datatype import LocationInfo
 # from configs.view_keys import JOB_VIEW_KEYS
 # from lib.utils.wordvecs_provider import get_industries_title_vector
@@ -24,15 +25,16 @@ class Job(Doc):
         # load languages
         self._required_languages = job_dict.get('requiredLanguages', [])
         self._preferred_languages = job_dict.get('preferredLanguages', [])
+        self._required_degree = self._get_degree(job_dict.get('minimumDegreeLevel', None))
         self._bool_obj = job_dict.get('boolObj', [])   # boolean object for skill search
         self._exp_range = job_dict.get('experienceYearRange', {})
         self._job_functions = job_dict.get('jobFunctions', [])
         self._min_exp, self._max_exp = self._exp_range.get('gte', np.NaN), self._exp_range.get('lte', np.NaN)
 
     def get_required_conditions(self):
-        skill_ = TalentConditions.create_from_ui_json(self._bool_obj)
+        skill_ = TalentConditions.create_from_ui_json(self._bool_obj) if self._bool_obj else None
         location_ = TalentConditions(conditions=[
-            LocationSearcher(search_mode=SearchMode.PREFERRED, location_info=loc) for loc in self._countries
+            LocationSearcher(search_mode=LocationSearchMode.PREFERRED, location_info=loc) for loc in self._countries
         ], operator=Operator.should)
         if (tolerance_min := self._exp_range.get('gte', self._exp_range.get('gt', 0)) // 3) > 2:
             tolerance_min = 2
@@ -48,7 +50,11 @@ class Job(Doc):
             operator=Operator.must
         )
         jf_ = JobFunctionSearcher(keywords=self._job_functions, key='jobFunctions')
-        return list(filter(None, [skill_, location_, exp_, language_, jf_]))
+        if self._required_degree:
+            degree_ = DegreeSearcher(degrees=[self._required_degree], search_mode=DegreeSearchMode.NOT_UNDER)
+        else:
+            degree_ = None
+        return list(filter(None, [skill_, location_, exp_, language_, jf_, degree_]))
 
     def __get_end_date(self, end_date_string, last_activity_time_string):
         try:

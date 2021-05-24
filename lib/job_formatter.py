@@ -13,8 +13,9 @@ def separate_keywords(keys):
         d_, _, _ = degree_regulator(k_)
         if d_:
             degrees.append(d_)
-        elif extract_languages(k_):
-            langs.append(k_)
+        elif langs_ := extract_languages(k_):
+            for lang_ in langs_:
+                langs.append(lang_.name)
         else:
             skills.append(k_)
     return degrees, langs, skills
@@ -118,7 +119,7 @@ def job_v1_to_v2(doc):
         ds = set(degrees)
         ds.discard(r_d)
         doc['preferredDegrees'] = [d.name for d in ds]
-    doc.pop('id')
+    doc.pop('id', None)
     # doc.pop('primarySale', None)
     doc.pop('priority', None)
     doc.pop('boolstr', None)
@@ -138,7 +139,7 @@ def job_v1_to_v2(doc):
         doc['companyId'] = str(s_)
     # pay
     factor = 1
-    if s_ := doc.pop('payRateUnitType'):
+    if s_ := doc.pop('payRateUnitType', None):
         if s_ == 'HOURLY':
             factor = 2000
         elif s_ == 'DAYLY':

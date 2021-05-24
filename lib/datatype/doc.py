@@ -4,7 +4,7 @@ from geopy.point import Point
 from libsearcher.pylibshared.datatype import LocationInfo, OfficialLocationInfo
 from libsearcher.utils.title_synonym import title_synonym
 # from configs.view_keys import COMMON_VIEW_KEYS
-from libsearcher.pylibshared.enumerations import Levels
+from libsearcher.pylibshared.enumerations import Levels, Degree
 from libsearcher.pylibshared.enumerations.location.country import get_country
 # from lib.utils.wordvecs_provider import get_skills_vector
 from libsearcher.pylibshared.utils.string_utils import list_in_list
@@ -36,7 +36,7 @@ class Doc:
         # load location
         self._locations = [LocationInfo.create_from_dict(l_) for l_ in _source.get(self.LOCATIONS_KEY, [])]
         self._countries = [LocationInfo(country=l_.get('country', ""),
-                                        official_loc=OfficialLocationInfo(l_.get('officialCountry', "")))
+                                        official_loc=OfficialLocationInfo(country=l_.get('officialCountry', "")))
                            for l_ in _source.get(self.LOCATIONS_KEY, [])]
         self._tokenized_titles = []
 
@@ -71,6 +71,15 @@ class Doc:
         #     if not v:
         #         continue
         #     self._view[k] = v
+
+    @staticmethod
+    def _get_degree(degree: str):
+        if not degree:
+            return None
+        try:
+            return Degree.__getattr__(degree)
+        except AttributeError:
+            logger.error(f"Got unknown degree {degree}")
 
     def __prepare_for_search(self, doc_dict):
         self._company = doc_dict.get('company', None)

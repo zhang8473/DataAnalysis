@@ -46,7 +46,7 @@ class APN:
         self.__host = host
         self.__refresh_token = refresh_token
         self.__header = GENERAL_HEADER.copy()
-        self.__renew_access_token()
+        self.__token_renewed = False
 
     def __renew_access_token(self):
         """
@@ -56,8 +56,9 @@ class APN:
         response_ = requests.request("POST", self.__host + '/api/v1/refresh-token',
                                      headers=GENERAL_HEADER,
                                      data=json.dumps({"refresh_token": self.__refresh_token}).encode('utf-8'))
-        logger.info(f"Refreshed token: {response_.text}")
+        logger.debug(f"Refreshed token: {response_.text}")
         self.__header['Authorization'] = rf'Bearer {response_.json()["access_token"]}'
+        self.__token_renewed = True
 
     @staticmethod
     def __format_job_data(data):
@@ -86,12 +87,22 @@ class APN:
         return data
 
     def get_talent(self, id_):
+        if not self.__token_renewed:
+            self.__renew_access_token()
         response = requests.request("GET", self.__host + f'/api/v1/talents/{id_}', headers=self.__header)
-        return APN.__format_talent_data(response.json())
+        response_body = response.json()
+        if 'error' in response_body:
+            raise ConnectionResetError(f"{response_body}")
+        return APN.__format_talent_data(response_body)
 
     def get_job(self, id_):
+        if not self.__token_renewed:
+            self.__renew_access_token()
         response = requests.request("GET", self.__host + f'/api/v1/jobs/{id_}', headers=self.__header)
-        return APN.__format_job_data(response.json())
+        response_body = response.json()
+        if 'error' in response_body:
+            raise ConnectionResetError(f"{response_body}")
+        return APN.__format_job_data(response_body)
 
 
 import requests

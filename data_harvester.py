@@ -1,3 +1,4 @@
+import time
 import argparse
 import json
 import pprint
@@ -6,13 +7,14 @@ from lib.connectors import APN, MariaDBFetcher, ESFiller
 from lib.datatype.job import Job
 from lib.job_formatter import job_v1_to_v2
 from lib.talent_formatter import talent_v1_to_v2
-from libsearcher.pylibshared.utils.elastic import ESClient
+from libsearcher.pylibshared.utils.elastic import ESClient, DocNotFoundError
 from libsearcher import TalentConditions, KeywordSearcher, Operator
 from libsearcher.pylibshared.utils.logger import get_logger
 pp = pprint.PrettyPrinter(indent=4, width=200)
 logger = get_logger(__name__, debug_level='DEBUG', to_file=True, to_stdout=True)
 TARGET_ES = ESClient("localhost:9200")
-CHECKERS = ('Amos', 'Shirley')
+TENANT_ID = '10'
+CHECKERS = ('Amos',)
 SELECT_COLUMNS = {"talent_id": 'int64', "job_id": 'int64'}
 
 
@@ -35,34 +37,26 @@ class ConditionChecker:
     def __init__(self, index_, id_, conditions):
         self.__index = index_
         self.__id = str(id_)
-        self.__all_conditions = conditions
-        self.__check_queue = [self.__all_conditions]
-        self.__success_conditions = []
-        self.__bfs_conditions()
+        self.__all_conditions = list(filter(None, conditions)) if conditions else None
 
-    def get_result(self):
+    def find_unsatisfied_conditions(self):
+        if self.__check_conditions(self.__all_conditions):
+            return None
+        unsatisfied_conditions = []
         for cond_ in self.__all_conditions:
-            if cond_ not in self.__success_conditions:
-                print(f"Dropped condition: {cond_.ui_json} - {cond_.es_condition}")
-        return self.__success_conditions
-
-    def __bfs_conditions(self):
-        while self.__check_queue:
-            current_conditions = self.__check_queue.pop(0)
-            if self.__check_conditions(current_conditions):
-                self.__success_conditions = current_conditions
-                return True
-            if len(current_conditions) > 1:
-                for i in range(len(current_conditions)):
-                    self.__check_queue.append(current_conditions[:i] + current_conditions[i+1:])
-        return False
+            if not self.__check_conditions([cond_]):
+                if hasattr(cond_, '_operator') and cond_._operator in (Operator.must, Operator.filter) and len(cond_._conditions) > 1:
+                    for cond__ in cond_._conditions:
+                        unsatisfied_conditions.append(cond__)
+                else:
+                    unsatisfied_conditions.append(cond_)
+        return unsatisfied_conditions
 
     def __check_conditions(self, conditions):
         id_search = KeywordSearcher(keywords=[self.__id], key='_id')
         all_conditions = TalentConditions(conditions=conditions + [id_search], operator=Operator.must)
         if f_ := all_conditions.invalid_fields:
-            print('Invalid Field:', json.dumps(f_, indent=4))
-            return
+            raise ValueError('Invalid Field:', json.dumps(f_, indent=4))
         es_condition = all_conditions.es_condition
         if TARGET_ES.count(index=self.__index, body={"query": es_condition}):
             return True
@@ -74,19 +68,46 @@ def main():
     checked_data = CheckedData('data/训练数据修正 - application_202005251554.csv')
     apn = APN(host='https://api.hitalentech.com', refresh_token=args.refresh_token)
     es_filler = ESFiller()
+    i = 0
     for row in checked_data.fetch():
-        job_apn_json = job_v1_to_v2(apn.get_job(row.job_id))
-        job_filled = es_filler.fill_job(job_apn_json, row.job_id)
-        talent_apn_json = talent_v1_to_v2(apn.get_talent(row.talent_id))
-        talent_filled = es_filler.fill_talent(talent_apn_json, row.talent_id)
-        pp.pprint(job_filled)
-        j_ = Job({"_id": "dummy", "_index": "dummy", "_source": job_filled})
-        conditions_ = j_.get_required_conditions()
-        checker = ConditionChecker('talents_10', row.talent_id, conditions_)
-        print(checker.get_result())
-        # pp.pprint(job_filled)
-        # pp.pprint(talent_filled)
-        break
+        i += 1
+        if i < 0:
+            continue
+        try:
+            j_ = TARGET_ES.get_doc('jobs_' + TENANT_ID, str(row.job_id))
+            job_filled = j_['_source']
+            if 'error' in job_filled:
+                TARGET_ES.delete('jobs_' + TENANT_ID, str(row.job_id))
+                raise DocNotFoundError(f"{i} - job {row.job_id} - {job_filled} doc broken")
+            # logger.debug(f"Job {row.job_id} is already in ES.")
+        except DocNotFoundError:
+            job_apn_json = job_v1_to_v2(apn.get_job(row.job_id))
+            job_filled = es_filler.fill_job(job_apn_json, row.job_id)
+            j_ = {"_id": "dummy", "_index": "dummy", "_source": job_filled}
+        try:
+            t_ = TARGET_ES.get_doc('talents_' + TENANT_ID, str(row.talent_id))
+            talent_filled = t_['_source']
+            if 'error' in talent_filled:
+                TARGET_ES.delete('talents_' + TENANT_ID, str(row.talent_id))
+                raise DocNotFoundError(f"{i} - talent {row.talent_id} - {talent_filled} doc broken")
+            # logger.debug(f"Talent {row.talent_id} is already in ES.")
+        except DocNotFoundError:
+            talent_apn_json = talent_v1_to_v2(apn.get_talent(row.talent_id))
+            talent_filled = es_filler.fill_talent(talent_apn_json, row.talent_id)
+            time.sleep(1)
+        conditions_ = Job(j_).get_required_conditions()
+        checker = ConditionChecker('talents_' + TENANT_ID, row.talent_id, conditions_)
+        if cs_ := checker.find_unsatisfied_conditions():
+            # pp.pprint(job_filled)
+            # pp.pprint(talent_filled)
+            logger.warning(
+                f"{i} - job {row.job_id}({row.job_duty}) - talent {row.talent_id}({row.talent_duty}). "
+                f"Job requirements are not satisfied:\n"
+                f"{[c_.ui_json for c_ in cs_]}\n")
+            # print(f"{[c_.es_condition for c_ in cs_]}\n")
+            # break
+        else:
+            logger.info(f"{i} - job {row.job_id}({row.job_duty}) - talent {row.talent_id}({row.talent_duty}) has passed check.")
     # server, db = args.input.split('/')
     # fetcher = MariaDBFetcher(server=server, user=args.username, password=args.password, db=db)
     # for sample in fetcher.fetch(skip=0):

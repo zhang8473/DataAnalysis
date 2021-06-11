@@ -1,8 +1,12 @@
 import numpy as np
 from datetime import datetime
-from libsearcher import TalentConditions, KeywordSearcher, Operator, ExperienceYearSearcher, LanguageSearcher, JobFunctionSearcher, DegreeSearcher, LocationSearcher
+from libsearcher import TalentConditions, KeywordSearcher, \
+    Operator, ExperienceYearSearcher, LanguageSearcher, JobFunctionSearcher, DegreeSearcher, LocationSearcher, \
+    TitleSearcher
+
 from libsearcher.location import SearchMode as LocationSearchMode
 from libsearcher.degree import SearchMode as DegreeSearchMode
+from libsearcher.title import SearchMode as TitleSearchMode
 from libsearcher.pylibshared.enumerations import JobStatus
 from libsearcher.pylibshared.datatype import LocationInfo
 # from configs.view_keys import JOB_VIEW_KEYS
@@ -29,6 +33,16 @@ class Job(Doc):
         self._bool_obj = job_dict.get('boolObj', [])   # boolean object for skill search
         self._exp_range = job_dict.get('experienceYearRange', {})
         self._job_functions = job_dict.get('jobFunctions', [])
+        if title := job_dict.get('title', None):
+            titles = title.split('|')
+        else:
+            titles = []
+        self._title_searcher = TitleSearcher(
+            titles=titles, search_modes=(TitleSearchMode.CURRENT,),
+            title_words_minimum_should_match='2',
+            concern_return_value=False,
+            search_synonym=True,
+            invalid_fields=None)
         self._min_exp, self._max_exp = self._exp_range.get('gte', np.NaN), self._exp_range.get('lte', np.NaN)
 
     def get_required_conditions(self):
@@ -49,12 +63,16 @@ class Job(Doc):
             conditions=[LanguageSearcher(keywords=[lang_], key='languages') for lang_ in self._required_languages],
             operator=Operator.must
         )
-        jf_ = JobFunctionSearcher(keywords=self._job_functions, key='jobFunctions')
+        jf_or_title = TalentConditions(
+            conditions=[JobFunctionSearcher(keywords=self._job_functions, key='jobFunctions'),
+                        self._title_searcher],
+            operator=Operator.should
+        )
         if self._required_degree:
             degree_ = DegreeSearcher(degrees=[self._required_degree], search_mode=DegreeSearchMode.NOT_UNDER)
         else:
             degree_ = None
-        return list(filter(None, [skill_, location_, exp_, language_, jf_, degree_]))
+        return list(filter(None, [skill_, location_, exp_, language_, jf_or_title, degree_]))
 
     def __get_end_date(self, end_date_string, last_activity_time_string):
         try:

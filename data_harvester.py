@@ -71,7 +71,7 @@ def main():
     i = 0
     for row in checked_data.fetch():
         i += 1
-        if i < 0:
+        if i < 6:
             continue
         try:
             j_ = TARGET_ES.get_doc('jobs_' + TENANT_ID, str(row.job_id))
@@ -93,18 +93,21 @@ def main():
             # logger.debug(f"Talent {row.talent_id} is already in ES.")
         except DocNotFoundError:
             talent_apn_json = talent_v1_to_v2(apn.get_talent(row.talent_id))
-            talent_filled = es_filler.fill_talent(talent_apn_json, row.talent_id)
+            try:
+                talent_filled = es_filler.fill_talent(talent_apn_json, row.talent_id)
+            except Exception as e:
+                pp.pprint(talent_apn_json)
+                raise e
             time.sleep(1)
         conditions_ = Job(j_).get_required_conditions()
         checker = ConditionChecker('talents_' + TENANT_ID, row.talent_id, conditions_)
         if cs_ := checker.find_unsatisfied_conditions():
-            # pp.pprint(job_filled)
-            # pp.pprint(talent_filled)
             logger.warning(
                 f"{i} - job {row.job_id}({row.job_duty}) - talent {row.talent_id}({row.talent_duty}). "
                 f"Job requirements are not satisfied:\n"
                 f"{[c_.ui_json for c_ in cs_]}\n")
-            # print(f"{[c_.es_condition for c_ in cs_]}\n")
+            # pp.pprint(job_filled)
+            # pp.pprint(talent_filled)
             # break
         else:
             logger.info(f"{i} - job {row.job_id}({row.job_duty}) - talent {row.talent_id}({row.talent_duty}) has passed check.")

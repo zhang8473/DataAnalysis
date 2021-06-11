@@ -121,7 +121,7 @@ class ESFiller:
 
     def fill_talent(self, doc, id_):
         response = requests.request("POST",
-                                    url=self._address + f'/filler/v1/sync/tenant/10/talent/{id_}/fill_es/',
+                                    url=self._address + f'/filler/v2/sync/tenant/10/talent/{id_}/fill_es/',
                                     headers={'Content-Type': 'application/json'},
                                     data=json.dumps(doc, ensure_ascii=False).encode('utf-8'))
         return response.json()

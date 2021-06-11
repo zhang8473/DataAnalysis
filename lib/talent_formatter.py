@@ -1,5 +1,7 @@
 import csv
 import codecs
+from libsearcher.pylibshared.utils.logger import get_logger
+logger = get_logger(__name__, debug_level='DEBUG', to_file=True, to_stdout=True)
 
 INDUSTRY_MAPPING = {}
 with codecs.open("meta_data/Linkedin-HiTalent Industry Mapping.csv", 'rU', 'utf-8-sig') as csv_file:
@@ -17,4 +19,46 @@ def talent_v1_to_v2(doc):
         industries |= INDUSTRY_MAPPING[key.lower()]
     if industries:
         doc['industries'] = list(industries)
+    # useless keys
+    doc.pop('active', None)
+    doc.pop('chinese', None)
+    doc.pop('photoUrl', None)
+    doc.pop('esId', None)
+    # locations
+    doc.pop('preferredLocations', None)
+    # salary
+    preferred_salary_range = {}
+    if sf_ := doc.pop('expectedSalaryFrom', None):
+        preferred_salary_range["gte"] = sf_
+    if st_ := doc.pop('expectedSalaryTo', None):
+        preferred_salary_range["lte"] = st_
+    if preferred_salary_range:
+        logger.warn("Unknown currency for expected salary")
+    # experience
+    title = doc.pop('title', None)
+    company = doc.pop('company', None)
+    if title or company:
+        for exp in doc.get('experiences', []):
+            if exp.get('current', None):
+                exp.pop('endDate', None)
+        for exp in doc.get('experiences', []):
+            if title == exp.get('title', None) and company == exp.get('company', None):
+                break
+        else:
+            logger.warn(f'Title \"{title}\" does not exist in experiences.')
+            if 'experiences' not in doc:
+                doc['experiences'] = []
+            exp = {}
+            if title:
+                exp['title'] = title
+            if company:
+                exp['companyName'] = company
+            doc['experiences'].append(exp)
+    # skills
+    for skill in doc.get('skills', []):
+        if skill.get('lastUsed', None):
+            skill.pop('firstUsed', None)
+        else:
+            skill.pop('current', None)
+            skill.pop('usedMonth', None)
     return doc

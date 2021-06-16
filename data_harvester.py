@@ -71,7 +71,7 @@ def main():
     i = 0
     for row in checked_data.fetch():
         i += 1
-        if i < 6:
+        if i < 0:
             continue
         try:
             j_ = TARGET_ES.get_doc('jobs_' + TENANT_ID, str(row.job_id))
